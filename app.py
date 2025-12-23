@@ -1,129 +1,77 @@
-from flask import Flask, request, jsonify, render_template_string
-import requests
+import streamlit as st
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import LabelEncoder
 
-app = Flask(__name__)
-
-API_KEY = "6aef023f0ffa4a3cce9f1790"
-
-CURRENCIES = [
-    "USD","PKR","GBP","EUR","INR","SAR","AED","AUD","CAD","JPY","CNY"
-]
-
-HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Currency Converter</title>
-    <style>
-        body {
-            font-family: Arial;
-            background: #f4f4f4;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        .box {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            width: 380px;
-            box-shadow: 0 0 10px #aaa;
-        }
-        h2 { text-align: center; }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            font-size: 15px;
-        }
-        .row {
-            display: flex;
-            gap: 10px;
-        }
-        .result {
-            margin-top: 15px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 17px;
-            color: green;
-        }
-    </style>
-</head>
-<body>
-
-<div class="box">
-    <h2>💱 Currency Converter</h2>
-
-    <input type="number" id="amount" placeholder="Amount">
-
-    <div class="row">
-        <select id="from">
-            {% for c in currencies %}
-                <option value="{{c}}">{{c}}</option>
-            {% endfor %}
-        </select>
-
-        <select id="to">
-            {% for c in currencies %}
-                <option value="{{c}}">{{c}}</option>
-            {% endfor %}
-        </select>
-    </div>
-
-    <div class="result" id="result"></div>
-</div>
-
-<script>
-async function convert() {
-    let amount = document.getElementById("amount").value;
-    let from = document.getElementById("from").value;
-    let to = document.getElementById("to").value;
-
-    if (!amount || amount <= 0) {
-        document.getElementById("result").innerText = "";
-        return;
-    }
-
-    let res = await fetch(`/convert?amount=${amount}&from=${from}&to=${to}`);
-    let data = await res.json();
-
-    if (data.success) {
-        document.getElementById("result").innerText =
-            `${amount} ${from} = ${data.result.toFixed(4)} ${to}`;
-    } else {
-        document.getElementById("result").innerText = "Conversion failed";
-    }
+# -------------------------------
+# Past Housing Data (Embedded)
+# -------------------------------
+data = {
+    "area": [
+        "Clifton","Clifton","Clifton","Clifton","Clifton",
+        "DHA","DHA","DHA","DHA","DHA",
+        "Gulshan","Gulshan","Gulshan","Gulshan","Gulshan",
+        "Saddar","Saddar","Saddar","Saddar","Saddar"
+    ],
+    "plot_size": [
+        120,120,120,240,240,
+        120,120,120,240,240,
+        120,120,120,240,240,
+        120,120,120,240,240
+    ],
+    "year": [
+        2018,2020,2022,2018,2022,
+        2018,2020,2022,2018,2022,
+        2018,2020,2022,2018,2022,
+        2018,2020,2022,2018,2022
+    ],
+    "price": [
+        18000000,21000000,26000000,32000000,42000000,
+        15000000,19000000,24000000,28000000,38000000,
+        8000000,10000000,13000000,14000000,20000000,
+        6000000,7500000,9500000,11000000,16000000
+    ]
 }
 
-document.getElementById("amount").addEventListener("input", convert);
-document.getElementById("from").addEventListener("change", convert);
-document.getElementById("to").addEventListener("change", convert);
-</script>
+df = pd.DataFrame(data)
 
-</body>
-</html>
-"""
+# -------------------------------
+# Encoding Area Names
+# -------------------------------
+le = LabelEncoder()
+df["area_encoded"] = le.fit_transform(df["area"])
 
-@app.route("/")
-def index():
-    return render_template_string(HTML, currencies=CURRENCIES)
+# -------------------------------
+# Train Model
+# -------------------------------
+X = df[["area_encoded", "plot_size", "year"]]
+y = df["price"]
 
-@app.route("/convert")
-def convert():
-    try:
-        amount = float(request.args.get("amount"))
-        from_currency = request.args.get("from")
-        to_currency = request.args.get("to")
+model = LinearRegression()
+model.fit(X, y)
 
-        url = f"https://v6.exchangerate-api.com/v6/{API_KEY}/latest/{from_currency}"
-        data = requests.get(url, timeout=10).json()
+# -------------------------------
+# Streamlit UI
+# -------------------------------
+st.title("🏠 Housing Price Predictor")
+st.write("Predict future house prices using past housing data")
 
-        rate = data["conversion_rates"][to_currency]
-        return jsonify(success=True, result=amount * rate)
+area = st.selectbox("Select Area", df["area"].unique())
+plot_size = st.selectbox("Select Plot Size (sq yards)", [120, 240])
+year = st.selectbox(
+    "Select Prediction Year",
+    [2026, 2027, 2028, 2029, 2030]
+)
 
-    except Exception as e:
-        return jsonify(success=False)
+# -------------------------------
+# Prediction
+# -------------------------------
+if st.button("Predict"):
+    area_encoded = le.transform([area])[0]
+    predicted_price = model.predict([[area_encoded, plot_size, year]])
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    st.success(
+        f"Estimated House Price in {year}: **PKR {int(predicted_price[0]):,}**"
+    )
+
+st.caption("Note: Prediction is based on historical market trends")
